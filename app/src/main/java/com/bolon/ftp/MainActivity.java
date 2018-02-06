@@ -50,6 +50,8 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+
+
         ftp_upload.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
