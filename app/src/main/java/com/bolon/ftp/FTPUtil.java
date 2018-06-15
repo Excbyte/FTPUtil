@@ -120,7 +120,7 @@ public class FTPUtil {
     }
 
     /**
-     * 上传文件
+     * 下载文件
      *
      * @param remoteDir
      * @param localDir
@@ -263,16 +263,19 @@ public class FTPUtil {
                 handler.sendMessage(msg);
 
                 //计算需要下载文件个数
-                calculateFtpFileCount(remoteDir);
-                //下载文件
-                download(remoteDir, localDir);
-                if (!interceptFlag) {
-                    handler.sendEmptyMessage(DOWN_OVER);
+                boolean state = calculateFtpFileCount(remoteDir);
+                if (state) {
+                    //下载文件
+                    state = download(remoteDir, localDir);
+                    if (state &&!interceptFlag){
+                        handler.sendEmptyMessage(DOWN_OVER);
+                    }
                 }
+
             }
         }
 
-        private void calculateFtpFileCount(String remoteDir) {
+        private boolean calculateFtpFileCount(String remoteDir) {
             try {
                 // 1、设置远程FTP目录
                 boolean state = client.changeWorkingDirectory(new String(remoteDir.getBytes(LOCAL_CHARSET), SERVER_CHARSET));
@@ -281,18 +284,19 @@ public class FTPUtil {
                     msg.what = DOWN_ERROR;
                     msg.obj = "服务器路径错误！";
                     handler.sendMessage(msg);
-                    return;
+                    return state;
                 }
                 // 2、读取远程文件
                 FTPFile[] ftpFiles = client.listFiles();
                 for (FTPFile file : ftpFiles) {
                     if (file.isDirectory()) {
-                        calculateFtpFileCount(remoteDir + "/" + file.getName());
+                        state = calculateFtpFileCount(remoteDir + "/" + file.getName());
                     } else {
                         ftpFileCount++;
                         ftpFileSize += file.getSize();
                     }
                 }
+                return state;
             } catch (Exception e) {
                 Message msg = new Message();
                 msg.what = DOWN_ERROR;
@@ -301,9 +305,11 @@ public class FTPUtil {
                 e.printStackTrace();
             }
 
+            return false;
         }
 
-        private void download(String remoteDir, String localDir) {
+        private boolean download(String remoteDir, String localDir) {
+            boolean state = false;
             try {
                 // 1、设置远程FTP目录
                 client.changeWorkingDirectory(new String(remoteDir.getBytes(LOCAL_CHARSET), SERVER_CHARSET));
@@ -319,15 +325,15 @@ public class FTPUtil {
                         }
                         index++;
                         currentPath = remoteDir + "/" + file.getName();
-                        boolean state = copySingleFile(file, localFile);
+                        state = copySingleFile(file, localFile);
                         if (!state) {
-                            return;
+                            return state;
                         }
                     }
                 }
                 for (FTPFile file : ftpFiles) {
                     if (file.isDirectory()) {
-                        download(remoteDir + "/" + file.getName(), localDir + "/" + file.getName());
+                        state = download(remoteDir + "/" + file.getName(), localDir + "/" + file.getName());
                     }
                 }
             } catch (Exception e) {
@@ -336,7 +342,9 @@ public class FTPUtil {
                 msg.obj = "下载文件异常！";
                 handler.sendMessage(msg);
                 e.printStackTrace();
+                state = false;
             }
+            return state;
         }
 
         private boolean copySingleFile(FTPFile remoteFile, File localFile) {
@@ -384,7 +392,10 @@ public class FTPUtil {
                         out.write(bytes, 0, c);
                         localSize += c;
                         indexSize += c;
-                        long nowProcess = localSize / step;
+                        long nowProcess = 0;
+                        if(step!=0){
+                            nowProcess=localSize/step;
+                        }
                         totalProcess = indexSize * 100L / ftpFileSize;
                         if (nowProcess > process) {
                             process = nowProcess;
@@ -428,7 +439,10 @@ public class FTPUtil {
                         out.write(bytes, 0, c);
                         localSize += c;
                         indexSize += c;
-                        long nowProcess = localSize / step;
+                        long nowProcess = 0;
+                        if(step!=0){
+                            nowProcess=localSize/step;
+                        }
                         totalProcess = indexSize * 100L / ftpFileSize;
                         //更新文件下载进度,值存放在process变量中
                         if (nowProcess > process) {
@@ -727,7 +741,7 @@ public class FTPUtil {
                     long localSize = file.length();
                     indexSize += remoteSize;
                     if (remoteSize == localSize) {
-                        long totalProcess=indexSize*100L/localFileSize;
+                        long totalProcess = indexSize * 100L / localFileSize;
                         Message msg = new Message();
                         //更新文件下载进度,值存放在process变量中
                         msg.what = UP_UPDATE;
